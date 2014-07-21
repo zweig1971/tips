@@ -140,7 +140,11 @@ def sw_scan(ssh, sw_found):
 def write_file(sw_found, name):        
     
     name=name+"_found.txt"    
-    datei=open(name,"w")
+
+    try:
+        datei=open(name,"w")
+    except Exception, e:
+        sys.exit ("Cant write result file")
 
     datei.write(str(datetime.now())+"\n\n")
     
@@ -211,29 +215,8 @@ for line in swac_found:
 # write file
 write_file(swac_found, detec)
 
+#loesche host file
+os.remove(datei_host)
     
 print "\nfinish"
 ssh.close()
-
-
-        
-#print "Switche found :",len(sw_found)
-
-#print "...scanning"
-#for ip in sw_found:
-#    resp = os.system("ping -c 1 "+ip)
-#    if resp == 0:
-#       sw_active.append(ip+" active")
-#
-#print "**************"
-#print "Active WR-Switche :"
-#
-#for sw in sw_active:
-#    print sw_active
-#
-#print "\n finisch"
-
-
-
-
-#datei.close()
