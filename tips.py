@@ -19,6 +19,7 @@ import getopt
 from datetime import datetime
 
 PFAD_datei = "/common/usr/dhcp/hosts.conf"
+PFAD_monitor = "/common/usr/monitoring/bin/"
 server_adress ="tsl001.acc.gsi.de"
 pos_ip = 3
 index=0
@@ -30,6 +31,8 @@ detec_expl="exploder"
 detec_vme="vmel"
 
 detec_ac ="64 bytes"
+detec_al ="timeout"
+detec_tr ="\x07"
 datei_host="myhosts.conf"
 
 sw_found = []
@@ -39,7 +42,7 @@ sw_active = []
 def help_txt():
     print "Timing IP Scanner (tips)"
     print "Duchsucht die host-datei auf der tsl001 nach dem gewuenschten geraet und"
-    print "prueft ob es online ist"
+    print "prueft ob es online ist (ping) und ob das datum lesbar ist (nicht bei den wr-switche)"
     print "arguments are :"
     print "-n  --nwt   scan all wr-switches"
     print "-p  --pex   scan all pexarias"
@@ -120,6 +123,33 @@ def extract(detec):
     return sw_found
 
 
+# ruft bei den scu/pex/expl/vme ein datum ab
+# -> device alive & link
+def alive(ssh, swac_found):
+    found=[]
+    i=1    
+    for data in swac_found:
+        print "\rCheck if unit alive %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        sys.stdout.flush()       
+        ip, text = data.split(" ")        
+        stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+"eb-date udp/"+ip)        
+        line=stdout.read()
+        error=stderr.read()
+            
+        if error != "":
+            print "ERROR :"+error
+            found.append(data +" --ERROR:"+error)
+        else :
+            s=line.find(detec_al)
+            if s > 0:
+                found.append(ip+" -- no response")
+            
+            text, date=line = line.split(detec_tr)
+            found.append(data+" --"+date.rstrip())
+        i=i+1        
+    return found, len(found)
+    
+
 def sw_scan(ssh, sw_found):    
     found=[]
     i=1
@@ -137,7 +167,7 @@ def sw_scan(ssh, sw_found):
         
         
 # ergebnis sichern
-def write_file(sw_found, name):        
+def write_file(sw_found, name, cnt_active, cnt_alive):        
     
     name=name+"_found.txt"    
 
@@ -146,12 +176,14 @@ def write_file(sw_found, name):
     except Exception, e:
         sys.exit ("Cant write result file")
 
-    datei.write(str(datetime.now())+"\n\n")
+    datei.write(str(datetime.now()))
+    datei.write("\nResult for "+name+" :")
+    datei.write("\nAktive found "+str(cnt_active)+" alive found "+str(cnt_alive)+"\n\n")
     
     for line in sw_found:
         datei.write(str(line)+"\n")
         
-    datei.close()
+    datei. close()
         
         
         
@@ -160,6 +192,8 @@ def write_file(sw_found, name):
         
 #detec=detec_sw
 detec=detec_sw
+cnt_alive = 0
+cnt_active = 0
         
 # arguments einlesen
 try:
@@ -197,23 +231,29 @@ copy_host(username, pswd)
 
 # host file nach switchen durchsuchen
 sw_found = extract(detec)
-print "\n"+detec+" found :",len(sw_found)
 
 # ssh verbindung aufbauen
 ssh=ssh_connect(username, pswd)
 
 # switche scannen
 swac_found=sw_scan(ssh, sw_found)
+cnt_active=len(swac_found)
+print"\nActive "+detec+" found: "+str(cnt_active)+"\n"
+
+# keine switche -> datum ueberpruefen
+if detec != detec_sw:
+    swac_found, cnt_alive= alive(ssh, swac_found) 
+    print"\nAlive "+detec+" found: "+str(cnt_alive)+"\n"
 
 print "\n\n----"
-print "Active "+detec+" found :",len(swac_found)
+print "Active/alive "+detec+" found :",cnt_active
 print "----\n"
 
 for line in swac_found:
     print line
    
 # write file
-write_file(swac_found, detec)
+write_file(swac_found, detec, cnt_active, cnt_alive)
 
 #loesche host file
 os.remove(datei_host)
