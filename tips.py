@@ -83,7 +83,6 @@ def copy_host(uname, pswd):
         sftp.get(remotepath, localpath)  
     except Exception, e:
         sys.exit ("FAILURE !")    
-
     print "...success"
 
 
@@ -128,6 +127,7 @@ def extract(detec):
 def alive(ssh, swac_found):
     found=[]
     i=1    
+    cnt_err=0
     for data in swac_found:
         print "\rCheck if unit alive %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()       
@@ -137,8 +137,8 @@ def alive(ssh, swac_found):
         error=stderr.read()
             
         if error != "":
-            print "ERROR :"+error
-            found.append(data +" --ERROR:"+error)
+            found.append(data +" --ERROR:"+error.rstrip())
+            cnt_err=cnt_err+1
         else :
             s=line.find(detec_al)
             if s > 0:
@@ -147,7 +147,7 @@ def alive(ssh, swac_found):
             text, date=line = line.split(detec_tr)
             found.append(data+" --"+date.rstrip())
         i=i+1        
-    return found, len(found)
+    return found, (len(found)-cnt_err)
     
 
 def sw_scan(ssh, sw_found):    
