@@ -35,6 +35,10 @@ detec_al ="timeout"
 detec_tr ="\x07"
 datei_host="myhosts.conf"
 
+act_firm="firm-mon"
+act_netm="net-mon"
+act_wrm ="wr-mon"
+
 sw_found = []
 sw_active = []
 
@@ -49,7 +53,11 @@ def help_txt():
     print "-s  --scu   scan all scu's"
     print "-e  --expl  scan all exploder"  
     print "-v  --vme   scan all vme's"
-
+    print "action:"
+    print "-f --firm-mon"
+    print "-n --net-mon"
+    print "-w --wr-mon"
+    print "default: wr-mon"
 
 # zugangsdaten abfragen
 def logindata():
@@ -124,15 +132,15 @@ def extract(detec):
 
 # ruft bei den scu/pex/expl/vme ein datum ab
 # -> device alive & link
-def alive(ssh, swac_found):
+def wrmon(ssh, swac_found):
     found=[]
     i=1    
     cnt_err=0
     for data in swac_found:
-        print "\rCheck if unit alive %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        print "\rintelligent investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()       
         ip, text = data.split(" ")        
-        stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+"eb-date udp/"+ip)        
+        stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+act_wrm+" udp/"+ip)        
         line=stdout.read()
         error=stderr.read()
             
@@ -144,10 +152,32 @@ def alive(ssh, swac_found):
             if s > 0:
                 found.append(ip+" -- no response")
             
-            text, date=line = line.split(detec_tr)
-            found.append(data+" --"+date.rstrip())
+            text, date, text_sy, sy_status=line = line.split(detec_tr)
+            found.append(data+" --"+date.rstrip()+" --"+sy_status.rstrip())
         i=i+1        
     return found, (len(found)-cnt_err)
+    
+    
+def netmon(ssh, swac_found):
+    found=[]
+    i=1
+    cnt_err=0
+    for data in swac_found:
+        print "\rintelligent investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        sys.stdout.flush()
+        ip, text = data.split(" ")  
+        stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+act_netm+" udp/"+ip) 
+        line=stdout.read()
+        error=stderr.read()
+        if error != "":
+            found.append(data +" --ERROR:"+error.rstrip())
+            cnt_err=cnt_err+1        
+        else:
+            found.append("---")
+            found.append(data+" :\n")
+            found.append(line+"\n")
+        i=i+1                   
+    return found, (len(found)-cnt_err)     
     
 
 def sw_scan(ssh, sw_found):    
@@ -190,20 +220,24 @@ def write_file(sw_found, name, cnt_active, cnt_alive):
 # -------------------------- main ------------------------------        
 
         
-#detec=detec_sw
+# default werte
 detec=detec_sw
+action=act_wrm
 cnt_alive = 0
 cnt_active = 0
         
 # arguments einlesen
 try:
-    myopts, args = getopt.getopt(sys.argv[1:],"hnpsev",["nwt","pex","scu","expl","vme"])
+    myopts, args = getopt.getopt(sys.argv[1:],"hnpsevfnw",["nwt","pex","scu","expl","vme","firm-mon","net-mon","wr-mon"])
 except getopt.GetoptError, err:
     print str(err)
     help_txt()   
     sys.exit(2)
 
 for o, arg in myopts:
+
+    print "o:",o
+
     if o in ("-h","--help"):
         help_txt()   
         sys.exit(2)
@@ -240,19 +274,22 @@ swac_found=sw_scan(ssh, sw_found)
 cnt_active=len(swac_found)
 print"\nActive "+detec+" found: "+str(cnt_active)+"\n"
 
+swac_found, cnt_alive= netmon(ssh, swac_found)
+
+
 # keine switche -> datum ueberpruefen
-if detec != detec_sw:
-    swac_found, cnt_alive= alive(ssh, swac_found) 
-    print"\nAlive "+detec+" found: "+str(cnt_alive)+"\n"
+#if detec != detec_sw:
+#    swac_found, cnt_alive= wrmon(ssh, swac_found) 
+#    print"\nAlive "+detec+" found: "+str(cnt_alive)+"\n"
 
 print "\n\n----"
-print "Active/alive "+detec+" found :",cnt_active
+print "Active "+detec+" found :",cnt_active
 print "----\n"
 
 for line in swac_found:
     print line
    
-# write file
+#write file
 write_file(swac_found, detec, cnt_active, cnt_alive)
 
 #loesche host file
