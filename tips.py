@@ -38,6 +38,7 @@ datei_host="myhosts.conf"
 act_firm="firm-mon"
 act_netm="net-mon"
 act_wrm ="wr-mon"
+act_no="No"
 
 sw_found = []
 sw_active = []
@@ -57,8 +58,8 @@ def help_txt():
     print "-f --firm-mon"
     print "-n --net-mon"
     print "-w --wr-mon"
-    print "default: wr-mon"
-
+ 
+ 
 # zugangsdaten abfragen
 def logindata():
     print "Connecting the tsl001 i need your Username, Passwort and your Creditcard Nummber"
@@ -137,7 +138,7 @@ def wrmon(ssh, swac_found):
     i=1    
     cnt_err=0
     for data in swac_found:
-        print "\rintelligent investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        print "\rwr-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()       
         ip, text = data.split(" ")        
         stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+act_wrm+" udp/"+ip)        
@@ -163,7 +164,7 @@ def netmon(ssh, swac_found):
     i=1
     cnt_err=0
     for data in swac_found:
-        print "\rintelligent investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        print "\rnet-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()
         ip, text = data.split(" ")  
         stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+act_netm+" udp/"+ip) 
@@ -179,6 +180,38 @@ def netmon(ssh, swac_found):
         i=i+1                   
     return found, (len(found)-cnt_err)     
     
+    
+def firmmon(ssh, swac_found):
+    found=[]
+    i=1
+    index=1
+    cnt_err=0
+    for data in swac_found:
+        print "\rfirm-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
+        sys.stdout.flush()
+        ip, text = data.split(" ")
+        stdin, stdout, stderr = ssh.exec_command(PFAD_monitor+act_firm+" udp/"+ip)        
+        line=stdout.read()
+        error=stderr.read()
+        if error != "":
+            found.append(data +" --ERROR:"+error.rstrip())
+            cnt_err=cnt_err+1        
+        else:
+            found.append("---")
+            found.append(data+" :\n")  
+            line=line.split("\n")
+            while index < 8:
+                try:
+                    found.append(line[index])
+                except:
+       #             del found[:]
+                    found.append("NO VAILID DATA")
+                    index=8
+                index=index+1
+        i=i+1
+        index=1
+    return found, (len(found)-cnt_err)       
+                 
 
 def sw_scan(ssh, sw_found):    
     found=[]
@@ -222,21 +255,19 @@ def write_file(sw_found, name, cnt_active, cnt_alive):
         
 # default werte
 detec=detec_sw
-action=act_wrm
+action=act_no
 cnt_alive = 0
 cnt_active = 0
         
 # arguments einlesen
 try:
-    myopts, args = getopt.getopt(sys.argv[1:],"hnpsevfnw",["nwt","pex","scu","expl","vme","firm-mon","net-mon","wr-mon"])
+    myopts, args = getopt.getopt(sys.argv[1:],"hnpsevftw",["nwt","pex","scu","expl","vme","firm-mon","net-mon","wr-mon"])
 except getopt.GetoptError, err:
     print str(err)
     help_txt()   
     sys.exit(2)
 
 for o, arg in myopts:
-
-    print "o:",o
 
     if o in ("-h","--help"):
         help_txt()   
@@ -251,11 +282,17 @@ for o, arg in myopts:
         detec=detec_expl
     elif o in ("-v","--vme"):
         detec=detec_vme
+    elif o in ("-f","--firm-mon"):
+        action=act_firm
+    elif o in ("-t","--net-mon"):
+        action=act_netm
+    elif o in ("-w","--wr-mon"):
+        action=act_wrm
     else: 
-        detec=detec_sw
+        help_txt()
               
 print "\nScan for "+detec
-      
+print "Acton :"+action      
        
 # login daten abfragen
 username, pswd = logindata()
@@ -274,16 +311,18 @@ swac_found=sw_scan(ssh, sw_found)
 cnt_active=len(swac_found)
 print"\nActive "+detec+" found: "+str(cnt_active)+"\n"
 
-swac_found, cnt_alive= netmon(ssh, swac_found)
 
+if action != act_no:
+    if action == act_firm:
+        swac_found, cnt_alive= firmmon(ssh, swac_found)
+    elif action == act_netm:
+        swac_found, cnt_alive= netmon(ssh, swac_found)
+    elif action == act_wrm: 
+        swac_found, cnt_alive= wrmon(ssh, swac_found) 
 
-# keine switche -> datum ueberpruefen
-#if detec != detec_sw:
-#    swac_found, cnt_alive= wrmon(ssh, swac_found) 
-#    print"\nAlive "+detec+" found: "+str(cnt_alive)+"\n"
 
 print "\n\n----"
-print "Active "+detec+" found :",cnt_active
+print "Action "+action+" "+detec+" found :",cnt_active
 print "----\n"
 
 for line in swac_found:
