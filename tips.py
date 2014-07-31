@@ -38,16 +38,18 @@ datei_host="myhosts.conf"
 act_firm="firm-mon"
 act_netm="net-mon"
 act_wrm ="wr-mon"
-act_no="No"
+act_no="No Action"
+act_all="over all"
 
 sw_found = []
 sw_active = []
+all_found = []
 
 # hilfe anzeigen
 def help_txt():
     print "Timing IP Scanner (tips)"
-    print "Duchsucht die host-datei auf der tsl001 nach dem gewuenschten geraet und"
-    print "prueft ob es online ist (ping) und ob das datum lesbar ist (nicht bei den wr-switche)"
+    print "scan the host-file on the tsl001 for the wanted unit"
+    print "testing it is online (ping) and make the desired action"
     print "arguments are :"
     print "-n  --nwt   scan all wr-switches"
     print "-p  --pex   scan all pexarias"
@@ -56,8 +58,9 @@ def help_txt():
     print "-v  --vme   scan all vme's"
     print "action:"
     print "-f --firm-mon"
-    print "-n --net-mon"
+    print "-t --net-mon"
     print "-w --wr-mon"
+    print "-a --all"
  
  
 # zugangsdaten abfragen
@@ -90,7 +93,7 @@ def copy_host(uname, pswd):
     try:
         sftp = paramiko.SFTPClient.from_transport(t)
         sftp.get(remotepath, localpath)  
-    except Exception, e:
+    except Exception:
         sys.exit ("FAILURE !")    
     print "...success"
 
@@ -102,7 +105,7 @@ def ssh_connect(uname, pswd):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         ssh.connect(hostname=server_adress, username=uname, password=pswd)
-    except Exception, e:
+    except Exception:
         sys.exit ("ACCESS DENIED")
 
     print "Access granted"
@@ -117,7 +120,7 @@ def extract(detec):
     print "\nopen host file "
     try:
         datei = open(datei_host, "r")
-    except Exception, e:
+    except Exception:
         sys.exit ("Cant open host file")
 
     print "...ok"
@@ -137,6 +140,7 @@ def wrmon(ssh, swac_found):
     found=[]
     i=1    
     cnt_err=0
+    found.append("\n--- wr-mon --")
     for data in swac_found:
         print "\rwr-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()       
@@ -163,6 +167,7 @@ def netmon(ssh, swac_found):
     found=[]
     i=1
     cnt_err=0
+    found.append("\n--- net-mon --")
     for data in swac_found:
         print "\rnet-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()
@@ -186,6 +191,7 @@ def firmmon(ssh, swac_found):
     i=1
     index=1
     cnt_err=0
+    found.append("\n--- firm-mon --")
     for data in swac_found:
         print "\rfirm-mon investigation in progress: %3d" % i, ('='*i)+('-'*(len(swac_found)-i)),   # status balken
         sys.stdout.flush()
@@ -204,7 +210,7 @@ def firmmon(ssh, swac_found):
                 try:
                     found.append(line[index])
                 except:
-       #             del found[:]
+                    found.pop(-1)
                     found.append("NO VAILID DATA")
                     index=8
                 index=index+1
@@ -230,18 +236,18 @@ def sw_scan(ssh, sw_found):
         
         
 # ergebnis sichern
-def write_file(sw_found, name, cnt_active, cnt_alive):        
+def write_file(sw_found, name, action, cnt_active, cnt_all):        
     
-    name=name+"_found.txt"    
+    dname=name+"_found.txt"    
 
     try:
-        datei=open(name,"w")
-    except Exception, e:
+        datei=open(dname,"w")
+    except Exception:
         sys.exit ("Cant write result file")
 
     datei.write(str(datetime.now()))
-    datei.write("\nResult for "+name+" :")
-    datei.write("\nAktive found "+str(cnt_active)+" alive found "+str(cnt_alive)+"\n\n")
+    datei.write("\nScan for "+name+" execute "+action)
+    datei.write("\nAktive "+str(cnt_active)+" found from registered "+str(cnt_all)+" units\n\n")
     
     for line in sw_found:
         datei.write(str(line)+"\n")
@@ -261,7 +267,7 @@ cnt_active = 0
         
 # arguments einlesen
 try:
-    myopts, args = getopt.getopt(sys.argv[1:],"hnpsevftw",["nwt","pex","scu","expl","vme","firm-mon","net-mon","wr-mon"])
+    myopts, args = getopt.getopt(sys.argv[1:],"hnpsevftwa",["nwt","pex","scu","expl","vme","firm-mon","net-mon","wr-mon","all"])
 except getopt.GetoptError, err:
     print str(err)
     help_txt()   
@@ -288,11 +294,12 @@ for o, arg in myopts:
         action=act_netm
     elif o in ("-w","--wr-mon"):
         action=act_wrm
+    elif o in ("-a", "--all"):
+        action=act_all        
     else: 
         help_txt()
               
-print "\nScan for "+detec
-print "Acton :"+action      
+print "\nScan for "+detec+" execute "+action      
        
 # login daten abfragen
 username, pswd = logindata()
@@ -300,36 +307,50 @@ username, pswd = logindata()
 # host file copieren
 copy_host(username, pswd)
 
-# host file nach switchen durchsuchen
+# host file nach der gesuchten unit durchsuchen
 sw_found = extract(detec)
 
 # ssh verbindung aufbauen
 ssh=ssh_connect(username, pswd)
 
-# switche scannen
-swac_found=sw_scan(ssh, sw_found)
-cnt_active=len(swac_found)
+# units scannen
+ping_found=sw_scan(ssh, sw_found)
+cnt_active=len(ping_found)
+
 print"\nActive "+detec+" found: "+str(cnt_active)+"\n"
 
 
 if action != act_no:
-    if action == act_firm:
-        swac_found, cnt_alive= firmmon(ssh, swac_found)
-    elif action == act_netm:
-        swac_found, cnt_alive= netmon(ssh, swac_found)
-    elif action == act_wrm: 
-        swac_found, cnt_alive= wrmon(ssh, swac_found) 
+    if (action == act_firm) or (action == act_all):
+        swac_found, cnt_alive= firmmon(ssh, ping_found)
+        print"\n"
+        all_found=all_found+swac_found        
+        del swac_found[:]         
+        
+    if (action == act_netm) or (action == act_all):
+        swac_found, cnt_alive= netmon(ssh, ping_found)
+        print"\n"
+        all_found=all_found+swac_found
+        del swac_found[:]
+
+    if (action == act_wrm) or (action == act_all): 
+        swac_found, cnt_alive= wrmon(ssh, ping_found) 
+        print"\n"
+        all_found=all_found+swac_found
+        del swac_found[:]
+else:
+    all_found=ping_found
 
 
 print "\n\n----"
-print "Action "+action+" "+detec+" found :",cnt_active
+print "Result: execute "+action+" "+detec+" found :",cnt_active
 print "----\n"
 
-for line in swac_found:
+for line in all_found:
     print line
    
 #write file
-write_file(swac_found, detec, cnt_active, cnt_alive)
+write_file(all_found, detec, action, cnt_active, len(sw_found))
 
 #loesche host file
 os.remove(datei_host)
