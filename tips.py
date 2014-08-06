@@ -26,13 +26,14 @@ index=0
 
 detec_sw ="nwt"
 detec_pex="pexaria"
-detec_scu="scul"
+detec_scu="scu"
 detec_expl="exploder"
-detec_vme="vmel"
+detec_vme="vme"
 
 detec_ac ="64 bytes"
 detec_al ="timeout"
 detec_tr ="\x07"
+detec_co ="#"
 datei_host="myhosts.conf"
 
 act_firm="firm-mon"
@@ -57,10 +58,10 @@ def help_txt():
     print "-e  --expl  scan all exploder"  
     print "-v  --vme   scan all vme's"
     print "action:"
-    print "-f --firm-mon"
-    print "-t --net-mon"
-    print "-w --wr-mon"
-    print "-a --all"
+    print "-f --firm-mon    show you version of the firmware"
+    print "-t --net-mon     network statistic"
+    print "-w --wr-mon      date and WR status"
+    print "-a --all         make all actions"
  
  
 # zugangsdaten abfragen
@@ -82,7 +83,7 @@ def copy_host(uname, pswd):
     try:
         t = paramiko.Transport((server_adress, 22))
         t.connect(username=uname, password=pswd)
-    except Exception, e:
+    except Exception:
         sys.exit ("ACCESS DENIED")    
 
     print "Access granted"
@@ -114,7 +115,8 @@ def ssh_connect(uname, pswd):
     #login = "scp "+username+server_adress+":"+PFAD_datei+" "+datei_host
     #os.system(login)
 
-
+# durchsucht das host file nach der gesuchten nomenklatur duch und gibt
+# die ip zurueck
 def extract(detec):
     # -- datei öffnen
     print "\nopen host file "
@@ -126,11 +128,15 @@ def extract(detec):
     print "...ok"
 
     for line in datei:
-        s=line.find(detec)
-        if s > 0:
-            a= line.split(",")
-            sw_found.append(a[pos_ip-1])
-
+        if line.strip(): #leere zeilen entfernen
+            if not (line.startswith(detec_co)):     #kommentarzeilen entfernen
+                line=line.split(",")                #zeile auftrennen
+                name=line[3]                        #an 3ter stelle sollte namen der unit stehen
+                if name.rfind(detec_co):            #wenn kommentar vorhanden -> abschneiden    
+                    name=name.split(detec_co)[0]
+                
+                if detec in name:                   #name = gesuchter name
+                    sw_found.append(line[2])        #ip in liste speichen
     return sw_found
 
 
@@ -229,7 +235,7 @@ def sw_scan(ssh, sw_found):
         line=stdout.read()
         s=line.find(detec_ac)        
         if s > 0:
-            found.append(ip+" active")
+            found.append(ip+" online")
         i=i+1
 
     return found        
